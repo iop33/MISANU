@@ -1,0 +1,150 @@
+{
+  "S-Central": [
+    {
+      "instance_name": "S-Central_1",
+      "best_distance": 775.1159836394372,
+      "avg_distance": 775.1159836394372,
+      "std_distance": 0.0,
+      "worst_distance": 775.1159836394372,
+      "n_routes": 4,
+      "avg_time": 0.30001258850097656,
+      "feasible": true
+    },
+    {
+      "instance_name": "S-Central_2",
+      "best_distance": 706.6128780638737,
+      "avg_distance": 706.6128780638737,
+      "std_distance": 0.0,
+      "worst_distance": 706.6128780638737,
+      "n_routes": 4,
+      "avg_time": 0.0600583553314209,
+      "feasible": true
+    },
+    {
+      "instance_name": "S-Central_3",
+      "best_distance": 735.3045353083692,
+      "avg_distance": 735.3045353083692,
+      "std_distance": 0.0,
+      "worst_distance": 735.3045353083692,
+      "n_routes": 4,
+      "avg_time": 0.0,
+      "feasible": true
+    },
+    {
+      "instance_name": "S-Central_4",
+      "best_distance": 773.1289330196564,
+      "avg_distance": 773.1289330196564,
+      "std_distance": 0.0,
+      "worst_distance": 773.1289330196564,
+      "n_routes": 4,
+      "avg_time": 1.2071423530578613,
+      "feasible": true
+    },
+    {
+      "instance_name": "S-Central_5",
+      "best_distance": 761.5985284001555,
+      "avg_distance": 761.5985284001555,
+      "std_distance": 0.0,
+      "worst_distance": 761.5985284001555,
+      "n_routes": 4,
+      "avg_time": 0.324277400970459,
+      "feasible": true
+    }
+  ],
+  "M-Central25": [
+    {
+      "instance_name": "M-Central25_1",
+      "best_distance": 899.1777268685571,
+      "avg_distance": 899.1777268685571,
+      "std_distance": 0.0,
+      "worst_distance": 899.1777268685571,
+      "n_routes": 5,
+      "avg_time": 5.5795440673828125,
+      "feasible": true
+    },
+    {
+      "instance_name": "M-Central25_2",
+      "best_distance": 822.3507108368344,
+      "avg_distance": 822.3507108368344,
+      "std_distance": 0.0,
+      "worst_distance": 822.3507108368344,
+      "n_routes": 5,
+      "avg_time": 2.651820659637451,
+      "feasible": true
+    },
+    {
+      "instance_name": "M-Central25_3",
+      "best_distance": 794.9325789833323,
+      "avg_distance": 794.9325789833323,
+      "std_distance": 0.0,
+      "worst_distance": 794.9325789833323,
+      "n_routes": 5,
+      "avg_time": 1.491302490234375,
+      "feasible": true
+    }
+  ],
+  "Triangle": [
+    {
+      "instance_name": "Triangle_1",
+      "best_distance": 1022.2780348021687,
+      "avg_distance": 1022.2780348021687,
+      "std_distance": 0.0,
+      "worst_distance": 1022.2780348021687,
+      "n_routes": 4,
+      "avg_time": 4.7335333824157715,
+      "feasible": true
+    },
+    {
+      "instance_name": "Triangle_2",
+      "best_distance": 1020.0722734258258,
+      "avg_distance": 1020.0722734258258,
+      "std_distance": 0.0,
+      "worst_distance": 1020.0722734258258,
+      "n_routes": 4,
+      "avg_time": 3.420349597930908,
+      "feasible": true
+    },
+    {
+      "instance_name": "Triangle_3",
+      "best_distance": 1022.6803180413888,
+      "avg_distance": 1022.6803180413888,
+      "std_distance": 0.0,
+      "worst_distance": 1022.6803180413888,
+      "n_routes": 4,
+      "avg_time": 2.5043818950653076,
+      "feasible": true
+    }
+  ],
+  "EMH": [
+    {
+      "instance_name": "EMH_20c6s_1",
+      "best_distance": 436.2993190819986,
+      "avg_distance": 436.2993190819986,
+      "std_distance": 0.0,
+      "worst_distance": 436.2993190819986,
+      "n_routes": 2,
+      "avg_time": 1.4140512943267822,
+      "feasible": true
+    },
+    {
+      "instance_name": "EMH_20c6s_2",
+      "best_distance": 391.44727918050137,
+      "avg_distance": 391.44727918050137,
+      "std_distance": 0.0,
+      "worst_distance": 391.44727918050137,
+      "n_routes": 2,
+      "avg_time": 1.2363603115081787,
+      "feasible": true
+    },
+    {
+      "instance_name": "EMH_20c6s_3",
+      "best_distance": 452.494199405469,
+      "avg_distance": 452.494199405469,
+      "std_distance": 0.0,
+      "worst_distance": 452.494199405469,
+      "n_routes": 3,
+      "avg_time": 0.08628392219543457,
+      "feasible": true
+    }
+  ]
+}
