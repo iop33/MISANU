@@ -1,116 +1,132 @@
 """
-Solution representation and evaluation for GrVRP-PCAFS.
+Predstavljanje i ocena resenja za GrVRP-PCAFS.
 
-A solution is a set of routes. Each route is a list of node indices
-starting and ending at depot (0). Routes may contain AFS visits.
+Resenje je skup ruta. Svaka ruta je lista indeksa cvorova koja
+pocinje i zavrsava u depou (0). Rute mogu sadrzati i posete punionicama.
 
-Includes the Reschedule procedure from Bruglieri et al. (2022) / Xu et al. (2025)
-for managing limited AFS capacity.
+Ukljucuje Reschedule proceduru iz Bruglieri et al. (2022) / Xu et al. (2025)
+za upravljanje ogranicenim kapacitetom punionica.
 """
 
-import copy
-import math
-import numpy as np
-from typing import List, Tuple, Optional, Dict
-from instance import Instance
+# =============================================================================
+# solution.py  -- RESENJE + OCENA RESENJA (srce projekta)
+# -----------------------------------------------------------------------------
+# Sadrzi:
+#   - klasu Route    (jedna ruta = niz cvorova [0, ..., 0])
+#   - klasu Solution (skup ruta koji pokriva sve musterije)
+#   - evaluate_route   : oceni jednu rutu (kilometraza, vreme, gorivo)
+#   - reschedule       : resi RED NA PUMPI (kapacitet punionica) -- iz Xu et al. 2025
+#   - evaluate_solution: puna ocena celog resenja + provera svih ogranicenja
+#   - compute_penalty  : KAZNA za prekrsaje (vodi pretragu kroz nedozvoljeni prostor)
+# =============================================================================
+
+import copy                                    # (uvezeno; duboko kopiranje)
+import math                                     # (uvezeno)
+import numpy as np                              # numericke operacije
+from typing import List, Tuple, Optional, Dict  # oznake tipova
+from instance import Instance                   # koristimo podatke instance (rastojanja, parametri)
 
 
 class Route:
-    """A single vehicle route: sequence of nodes starting and ending at depot."""
-    
+    """Jedna ruta vozila: niz cvorova koji pocinje i zavrsava u depou."""
+    # RUTA = put jednog vozila. Npr. [0, 3, 5, 11, 2, 0]:
+    #   0 = depo (pocetak i kraj), 3/5/2 = musterije, 11 = punionica.
+
     def __init__(self, nodes: List[int] = None):
         """
-        nodes: list of node indices, e.g. [0, 3, 5, 11, 2, 0]
-        where 0=depot, 3,5,2=customers, 11=AFS
+        nodes: lista indeksa cvorova, npr. [0, 3, 5, 11, 2, 0]
+        gde je 0=depo, 3,5,2=musterije, 11=punionica
         """
         if nodes is None:
-            self.nodes = [0, 0]  # empty route
+            self.nodes = [0, 0]                       # prazna ruta = samo depo->depo
         else:
-            self.nodes = list(nodes)
-    
+            self.nodes = list(nodes)                  # kopija liste cvorova (da se ne deli referenca)
+
     @property
     def is_empty(self) -> bool:
-        """Route is empty if it only contains depot nodes."""
-        return len(self.nodes) <= 2
-    
+        """Ruta je prazna ako sadrzi samo depo cvorove."""
+        return len(self.nodes) <= 2                   # [0,0] -> prazna (nema nijedne musterije)
+
     def customers(self, instance: Instance) -> List[int]:
-        """Return list of customer nodes in this route."""
-        return [n for n in self.nodes if instance.is_customer(n)]
-    
+        """Vrati listu cvorova-musterija u ovoj ruti."""
+        return [n for n in self.nodes if instance.is_customer(n)]  # samo cvorovi-musterije iz rute
+
     def stations(self, instance: Instance) -> List[int]:
-        """Return list of AFS nodes in this route."""
-        return [n for n in self.nodes if instance.is_station(n)]
-    
+        """Vrati listu cvorova-punionica u ovoj ruti."""
+        return [n for n in self.nodes if instance.is_station(n)]   # samo cvorovi-punionice iz rute
+
     def insert(self, position: int, node: int):
-        """Insert a node at given position (1-indexed within route body)."""
-        self.nodes.insert(position, node)
-    
+        """Ubaci cvor na datu poziciju u ruti."""
+        self.nodes.insert(position, node)             # ubaci cvor na datu poziciju
+
     def remove_node(self, node: int):
-        """Remove first occurrence of node from route."""
-        self.nodes.remove(node)
-    
+        """Izbaci prvo pojavljivanje datog cvora iz rute."""
+        self.nodes.remove(node)                       # izbaci prvo pojavljivanje datog cvora
+
     def remove_at(self, position: int):
-        """Remove node at position."""
-        self.nodes.pop(position)
-    
+        """Izbaci cvor sa date pozicije."""
+        self.nodes.pop(position)                      # izbaci cvor sa date pozicije
+
     def copy(self) -> 'Route':
-        return Route(list(self.nodes))
-    
+        return Route(list(self.nodes))                # napravi nezavisnu kopiju rute
+
     def __repr__(self):
-        return f"Route({self.nodes})"
-    
+        return f"Route({self.nodes})"                 # tekstualni prikaz, npr. Route([0, 3, 0])
+
     def __len__(self):
-        return len(self.nodes)
+        return len(self.nodes)                        # broj cvorova u ruti
 
 
 class Solution:
-    """A complete solution: set of routes covering all customers."""
-    
+    """Kompletno resenje: skup ruta koji pokriva sve musterije."""
+    # RESENJE = lista ruta. Cuva i kes (cache) ocene da se ne racuna stalno iznova.
+
     def __init__(self, instance: Instance, routes: List[Route] = None):
-        self.instance = instance
-        self.routes = routes if routes is not None else []
-        self._total_distance = None
-        self._feasible = None
-        self._evaluation = None
-    
+        self.instance = instance                      # na koju instancu se odnosi
+        self.routes = routes if routes is not None else []  # lista ruta (podrazumevano prazna)
+        self._total_distance = None                   # kes: ukupna kilometraza (None = jos neizracunato)
+        self._feasible = None                         # kes: izvodljivost
+        self._evaluation = None                       # kes: cela ocena
+
     def invalidate_cache(self):
+        # Pozvati kad se resenje promeni -> brise kes da se ocena ponovo izracuna.
         self._total_distance = None
         self._feasible = None
         self._evaluation = None
-    
+
     @property
     def n_routes(self) -> int:
-        return len(self.routes)
-    
+        return len(self.routes)                       # broj ruta (= broj koriscenih vozila)
+
     def add_route(self, route: Route):
-        self.routes.append(route)
-        self.invalidate_cache()
-    
+        self.routes.append(route)                     # dodaj rutu...
+        self.invalidate_cache()                       # ...i ponisti kes
+
     def remove_empty_routes(self):
-        self.routes = [r for r in self.routes if not r.is_empty]
+        self.routes = [r for r in self.routes if not r.is_empty]  # izbaci prazne rute [0,0]
         self.invalidate_cache()
-    
+
     def copy(self) -> 'Solution':
-        new_sol = Solution(self.instance, [r.copy() for r in self.routes])
+        new_sol = Solution(self.instance, [r.copy() for r in self.routes])  # duboka kopija svih ruta
         return new_sol
-    
+
     def get_all_customers(self) -> set:
-        """Get set of all customers in the solution."""
+        """Vrati skup svih musterija koje su u resenju."""
         customers = set()
-        for route in self.routes:
-            for n in route.nodes:
+        for route in self.routes:                     # prodji kroz sve rute...
+            for n in route.nodes:                     # i sve cvorove u njima...
                 if self.instance.is_customer(n):
-                    customers.add(n)
+                    customers.add(n)                  # skupi sve opsluzene musterije
         return customers
-    
+
     def get_unserved_customers(self) -> set:
-        """Get customers not yet in any route."""
-        served = self.get_all_customers()
-        all_customers = set(self.instance.customer_indices)
-        return all_customers - served
-    
+        """Vrati musterije koje jos nisu ni u jednoj ruti."""
+        served = self.get_all_customers()             # opsluzene
+        all_customers = set(self.instance.customer_indices)  # sve musterije
+        return all_customers - served                 # razlika = jos NEopsluzene
+
     def __repr__(self):
-        eval_info = self.evaluate()
+        eval_info = self.evaluate()                   # uzmi ocenu (kilometraza, izvodljivost)
         return (f"Solution(routes={self.n_routes}, "
                 f"dist={eval_info['total_distance']:.2f}, "
                 f"feasible={eval_info['feasible']})")
@@ -118,21 +134,23 @@ class Solution:
 
 def evaluate_route(route: Route, instance: Instance) -> dict:
     """
-    Evaluate a single route: compute distance, duration, fuel feasibility.
-    Does NOT check AFS capacity (that's a global constraint).
-    
-    Returns dict with:
-    - distance: total travel distance
-    - duration: total route duration (travel + service + refueling)
-    - fuel_feasible: True if fuel constraints are satisfied
-    - duration_feasible: True if duration <= Tmax
-    - arrival_times: list of arrival times at each node
-    - fuel_levels: list of fuel levels at arrival at each node
+    Oceni jednu rutu: izracunaj kilometrazu, trajanje i izvodljivost po gorivu.
+    NE proverava kapacitet punionica (to je globalno ogranicenje, vidi reschedule).
+
+    Vraca recnik sa:
+    - distance: ukupna predjena kilometraza
+    - duration: ukupno trajanje rute (voznja + usluga + dopuna)
+    - fuel_feasible: True ako su uslovi goriva ispostovani
+    - duration_feasible: True ako je trajanje <= Tmax
+    - arrival_times: vremena dolaska u svaki cvor
+    - fuel_levels: nivoi goriva pri dolasku u svaki cvor
     """
+    # ===== OCENA JEDNE RUTE: prolazak cvor-po-cvor uz pracenje vremena i goriva =====
     nodes = route.nodes
     n = len(nodes)
-    
+
     if n <= 2:
+        # Prazna ruta ([0,0]) -> sve nule, pun rezervoar, izvodljivo.
         return {
             'distance': 0.0,
             'duration': 0.0,
@@ -142,55 +160,55 @@ def evaluate_route(route: Route, instance: Instance) -> dict:
             'fuel_levels': [instance.tank_capacity, instance.tank_capacity],
             'departure_times': [0.0, 0.0],
         }
-    
-    total_distance = 0.0
-    arrival_times = [0.0] * n
-    departure_times = [0.0] * n
-    fuel_levels = [0.0] * n
-    
-    # Start at depot with full tank
+
+    total_distance = 0.0                              # zbir svih deonica
+    arrival_times = [0.0] * n                         # vreme DOLASKA u svaki cvor
+    departure_times = [0.0] * n                       # vreme POLASKA iz svakog cvora
+    fuel_levels = [0.0] * n                            # nivo goriva pri dolasku u svaki cvor
+
+    # U depou krecemo sa PUNIM rezervoarom (Q)
     fuel_levels[0] = instance.tank_capacity
-    departure_times[0] = instance.p_start  # initial refuel time
-    
-    fuel_feasible = True
-    
-    for i in range(1, n):
-        prev = nodes[i - 1]
-        curr = nodes[i]
-        
-        d = instance.dist(prev, curr)
-        t = instance.travel_time(prev, curr)
-        total_distance += d
-        
-        # Arrival time
+    departure_times[0] = instance.p_start              # pocetno vreme priprema u depou
+
+    fuel_feasible = True                               # pretpostavka: gorivo je OK dok se ne dokaze suprotno
+
+    for i in range(1, n):                              # za svaki sledeci cvor u ruti...
+        prev = nodes[i - 1]                            # prethodni cvor
+        curr = nodes[i]                                # trenutni cvor
+
+        d = instance.dist(prev, curr)                  # rastojanje deonice
+        t = instance.travel_time(prev, curr)           # vreme putovanja deonice
+        total_distance += d                            # dodaj na ukupnu kilometrazu
+
+        # Vreme dolaska = polazak iz prethodnog cvora + voznja
         arrival_times[i] = departure_times[i - 1] + t
-        
-        # Fuel level on arrival
-        fuel_consumed = instance.consumption_rate * d
-        fuel_levels[i] = fuel_levels[i - 1] - fuel_consumed
-        
-        if fuel_levels[i] < -1e-6:
-            fuel_feasible = False
-        
-        # Departure time
+
+        # Nivo goriva pri dolasku
+        fuel_consumed = instance.consumption_rate * d  # potroseno gorivo = r * rastojanje
+        fuel_levels[i] = fuel_levels[i - 1] - fuel_consumed  # gorivo se SMANJI za potroseno
+
+        if fuel_levels[i] < -1e-6:                     # ako je gorivo PALO ISPOD NULE...
+            fuel_feasible = False                      # ...ruta je nedozvoljena (vozilo bi stalo)
+
+        # Vreme polaska iz trenutnog cvora
         if instance.is_customer(curr):
-            departure_times[i] = arrival_times[i] + instance.get_service_time(curr)
+            departure_times[i] = arrival_times[i] + instance.get_service_time(curr)  # musterija: + usluga
         elif instance.is_station(curr):
-            # Full refuel
-            departure_times[i] = arrival_times[i] + instance.refueling_time
-            fuel_levels[i] = instance.tank_capacity  # refuel to full
+            # Dopuna do punog
+            departure_times[i] = arrival_times[i] + instance.refueling_time  # punionica: + vreme dopune
+            fuel_levels[i] = instance.tank_capacity    # ...i rezervoar se NAPUNI na Q
         elif instance.is_depot(curr):
-            departure_times[i] = arrival_times[i]
+            departure_times[i] = arrival_times[i]      # depo: nema zadrzavanja
         else:
             departure_times[i] = arrival_times[i]
-    
-    duration = arrival_times[-1]  # arrival time at final depot
-    
+
+    duration = arrival_times[-1]                       # trajanje rute = vreme dolaska u krajnji depo
+
     return {
         'distance': total_distance,
         'duration': duration,
         'fuel_feasible': fuel_feasible,
-        'duration_feasible': duration <= instance.t_max + 1e-6,
+        'duration_feasible': duration <= instance.t_max + 1e-6,  # da li je trajanje <= T_max
         'arrival_times': arrival_times,
         'departure_times': departure_times,
         'fuel_levels': fuel_levels,
@@ -199,169 +217,170 @@ def evaluate_route(route: Route, instance: Instance) -> dict:
 
 def reschedule(instance: Instance, solution: 'Solution') -> Tuple[bool, Dict[int, float]]:
     """
-    Reschedule procedure: check and resolve AFS capacity conflicts.
-    
-    Based on Algorithm A1 from Xu et al. (2025) supplementary.
-    
-    For each AFS, collect all vehicles that visit it with their arrival times.
-    If more than eta_s vehicles overlap, delay some vehicles.
-    
-    Returns:
-        (feasible, waiting_times): 
-        - feasible: True if scheduling is possible within Tmax
-        - waiting_times: dict mapping (route_idx, position) -> waiting_time
+    Reschedule procedura: proveri i resi konflikte kapaciteta punionica.
+
+    Zasnovano na Algoritmu A1 iz Xu et al. (2025), dodatak.
+
+    Za svaku punionicu skupi sva vozila koja je posecuju sa njihovim vremenima dolaska.
+    Ako se preklapa vise od eta_s vozila, odlozi (zadrzi) neka vozila.
+
+    Vraca:
+        (feasible, waiting_times):
+        - feasible: True ako je raspored moguc unutar Tmax
+        - waiting_times: recnik (route_idx, position) -> vreme cekanja
     """
-    waiting_times = {}
-    
-    # Collect all AFS visits across all routes, grouped by station
-    # First evaluate all routes without waiting
+    # ===== RED NA PUMPI: ako vise vozila dodje na istu stanicu nego sto ima pumpi,
+    #       neka vozila CEKAJU. Ovo je deo specifican za nas problem (kapacitet punionica). =====
+    waiting_times = {}                                 # rezultat: (ruta, pozicija) -> koliko ceka
+
+    # Prvo oceni svaku rutu (bez cekanja), pa skupi posete punionicama po stanici
     route_evals = []
     for route in solution.routes:
-        route_evals.append(evaluate_route(route, instance))
-    
-    # Group AFS visits by station
-    station_visits = {}  # station_index -> list of (route_idx, pos_in_route, arrival_time)
-    
-    for r_idx, route in enumerate(solution.routes):
+        route_evals.append(evaluate_route(route, instance))  # prvo oceni svaku rutu (bez cekanja)
+
+    # Grupisi posete punionicama po stanici
+    station_visits = {}  # indeks_stanice -> lista (route_idx, pos_in_route, arrival_time)
+
+    for r_idx, route in enumerate(solution.routes):    # prodji kroz sve rute...
         eval_data = route_evals[r_idx]
-        for pos, node in enumerate(route.nodes):
-            if instance.is_station(node):
-                # Map to actual station
+        for pos, node in enumerate(route.nodes):       # i sve cvorove...
+            if instance.is_station(node):              # ako je cvor punionica...
                 station_idx = node
                 if station_idx not in station_visits:
                     station_visits[station_idx] = []
-                station_visits[station_idx].append(
+                station_visits[station_idx].append(    # zabelezi posetu: (ruta, pozicija, vreme dolaska)
                     (r_idx, pos, eval_data['arrival_times'][pos])
                 )
-    
-    # For each station, check capacity and resolve conflicts
+
+    # Za svaku stanicu proveri kapacitet i resi konflikte
     feasible = True
-    
-    for station_idx, visits in station_visits.items():
-        capacity = instance.get_station_capacity(station_idx)
-        refuel_time = instance.refueling_time
-        
+
+    for station_idx, visits in station_visits.items():  # za svaku punionicu posebno...
+        capacity = instance.get_station_capacity(station_idx)  # broj pumpi (eta)
+        refuel_time = instance.refueling_time          # koliko traje jedna dopuna
+
         if len(visits) <= capacity:
-            continue  # No conflict
-        
-        # Sort by arrival time
-        visits_sorted = sorted(visits, key=lambda x: x[2])
-        
-        # Apply reschedule algorithm
-        arrival_times = [v[2] for v in visits_sorted]
+            continue                                   # ako je poseta <= broj pumpi -> nema reda
+
+        # Poredaj posete po vremenu dolaska
+        visits_sorted = sorted(visits, key=lambda x: x[2])  # poredaj posete po vremenu dolaska
+
+        # Primeni algoritam preraspodele
+        arrival_times = [v[2] for v in visits_sorted]  # samo vremena dolaska
         n_vehicles = len(arrival_times)
-        
-        # Reschedule: ensure at most capacity vehicles refuel simultaneously
-        adjusted_arrivals = list(arrival_times)
+
+        # Preraspodela: najvise "capacity" vozila se puni istovremeno
+        adjusted_arrivals = list(arrival_times)        # kopija koju cemo "gurati" da resimo preklapanja
         changed = True
-        max_iterations = 1000
+        max_iterations = 1000                          # zastita od beskonacne petlje
         iteration = 0
-        
-        while changed and iteration < max_iterations:
+
+        while changed and iteration < max_iterations:  # ponavljaj dok ima preklapanja...
             changed = False
             iteration += 1
             for i in range(n_vehicles - 1):
                 num_overlap = 0
-                start_i = adjusted_arrivals[i]
-                end_i = start_i + refuel_time
-                
+                start_i = adjusted_arrivals[i]         # pocetak dopune vozila i
+                end_i = start_i + refuel_time          # kraj dopune vozila i
+
                 for j in range(i + 1, n_vehicles):
                     start_j = adjusted_arrivals[j]
                     end_j = start_j + refuel_time
-                    
-                    if start_i < end_j and start_j < end_i:
+
+                    if start_i < end_j and start_j < end_i:  # da li se intervali i i j PREKLAPAJU?
                         num_overlap += 1
-                        
-                        if num_overlap > capacity - 1:
-                            # Conflict: delay one vehicle
+
+                        if num_overlap > capacity - 1:  # vise preklapanja nego sto ima pumpi -> KONFLIKT
+                            # Konflikt: odlozi jedno vozilo na kraj drugog
                             if end_j <= end_i:
-                                adjusted_arrivals[i] = end_j
+                                adjusted_arrivals[i] = end_j   # pomeri i da pocne kad j zavrsi
                             else:
-                                adjusted_arrivals[j] = end_i
+                                adjusted_arrivals[j] = end_i   # ili pomeri j da pocne kad i zavrsi
                             changed = True
                             break
                 if changed:
                     break
-        
-        # Compute waiting times
+
+        # Izracunaj vremena cekanja
         for k, (r_idx, pos, orig_arrival) in enumerate(visits_sorted):
-            wt = adjusted_arrivals[k] - orig_arrival
+            wt = adjusted_arrivals[k] - orig_arrival   # cekanje = novo vreme - prvobitno vreme dolaska
             if wt > 1e-6:
-                waiting_times[(r_idx, pos)] = wt
-    
-    # Check if waiting times cause any route to exceed Tmax
-    for r_idx, route in enumerate(solution.routes):
+                waiting_times[(r_idx, pos)] = wt        # zapamti koliko ko ceka
+
+    # Proveri da li cekanje gura neku rutu preko Tmax
+    for r_idx, route in enumerate(solution.routes):    # da li cekanje gura neku rutu preko T_max?
         total_wait = sum(
-            wt for (ri, pos), wt in waiting_times.items() if ri == r_idx
+            wt for (ri, pos), wt in waiting_times.items() if ri == r_idx  # ukupno cekanje te rute
         )
         eval_data = route_evals[r_idx]
         if eval_data['duration'] + total_wait > instance.t_max + 1e-6:
-            feasible = False
-    
+            feasible = False                           # ako da -> resenje NIJE izvodljivo po kapacitetu
+
     return feasible, waiting_times
 
 
 def evaluate_solution(solution: 'Solution') -> dict:
     """
-    Full evaluation of a solution including AFS capacity constraints.
-    
-    Returns dict with:
-    - total_distance: sum of all route distances
-    - route_evaluations: list of per-route evaluations
-    - all_customers_served: True if all customers are served exactly once
-    - vehicle_count_feasible: True if n_routes <= n_vehicles
-    - fuel_feasible: True if all routes satisfy fuel constraints
-    - duration_feasible: True if all routes satisfy duration constraints
-    - capacity_feasible: True if AFS capacity constraints can be satisfied
-    - feasible: True if ALL constraints are satisfied
-    - waiting_times: dict of waiting times from Reschedule
+    Puna ocena resenja, ukljucujuci i ogranicenja kapaciteta punionica.
+
+    Vraca recnik sa:
+    - total_distance: zbir kilometraza svih ruta
+    - route_evaluations: lista ocena po ruti
+    - all_customers_served: True ako je svaka musterija opsluzena tacno jednom
+    - vehicle_count_feasible: True ako je broj ruta <= broj vozila
+    - fuel_feasible: True ako sve rute postuju gorivo
+    - duration_feasible: True ako sve rute postuju trajanje
+    - capacity_feasible: True ako se kapacitet punionica moze ispostovati
+    - feasible: True ako su SVA ogranicenja zadovoljena
+    - waiting_times: recnik vremena cekanja iz Reschedule
     """
+    # ===== PUNA OCENA: kilometraza + SVE provere izvodljivosti =====
     instance = solution.instance
-    
-    # Evaluate each route
+
+    # Oceni svaku rutu
     route_evals = []
     total_distance = 0.0
     fuel_feasible = True
     duration_feasible = True
-    
-    for route in solution.routes:
+
+    for route in solution.routes:                      # oceni svaku rutu posebno...
         eval_data = evaluate_route(route, instance)
         route_evals.append(eval_data)
-        total_distance += eval_data['distance']
+        total_distance += eval_data['distance']        # saberi kilometrazu
         if not eval_data['fuel_feasible']:
-            fuel_feasible = False
+            fuel_feasible = False                       # ako bar jedna ruta ima problem s gorivom...
         if not eval_data['duration_feasible']:
-            duration_feasible = False
-    
-    # Check all customers served exactly once
-    customer_count = {}
+            duration_feasible = False                   # ...ili s trajanjem -> obelezi
+
+    # Proveri da li je svaka musterija opsluzena tacno jednom
+    customer_count = {}                                # broji koliko puta je svaka musterija opsluzena
     for route in solution.routes:
         for node in route.nodes:
             if instance.is_customer(node):
                 customer_count[node] = customer_count.get(node, 0) + 1
-    
-    all_served = (set(customer_count.keys()) == set(instance.customer_indices))
-    no_duplicates = all(v == 1 for v in customer_count.values())
+
+    all_served = (set(customer_count.keys()) == set(instance.customer_indices))  # da li su SVE opsluzene?
+    no_duplicates = all(v == 1 for v in customer_count.values())  # da li je svaka tacno JEDNOM?
     customers_ok = all_served and no_duplicates
-    
-    # Check vehicle count
-    vehicle_ok = len(solution.routes) <= instance.n_vehicles
-    
-    # Check AFS capacity via Reschedule
-    capacity_feasible, waiting_times = reschedule(instance, solution)
-    
-    # Recheck duration with waiting times
-    if waiting_times:
+
+    # Proveri broj vozila
+    vehicle_ok = len(solution.routes) <= instance.n_vehicles  # broj ruta <= broj vozila?
+
+    # Proveri kapacitet punionica preko Reschedule
+    capacity_feasible, waiting_times = reschedule(instance, solution)  # provera reda na pumpi
+
+    # Ponovo proveri trajanje sa vremenima cekanja
+    if waiting_times:                                  # ako ima cekanja, ponovo proveri trajanje...
         for r_idx, route in enumerate(solution.routes):
             total_wait = sum(
                 wt for (ri, pos), wt in waiting_times.items() if ri == r_idx
             )
             if route_evals[r_idx]['duration'] + total_wait > instance.t_max + 1e-6:
-                duration_feasible = False
-    
-    feasible = (customers_ok and vehicle_ok and fuel_feasible 
+                duration_feasible = False              # cekanje moze da obori trajanje preko T_max
+
+    feasible = (customers_ok and vehicle_ok and fuel_feasible  # IZVODLJIVO = svi uslovi zadovoljeni
                 and duration_feasible and capacity_feasible)
-    
+
     return {
         'total_distance': total_distance,
         'route_evaluations': route_evals,
@@ -376,52 +395,56 @@ def evaluate_solution(solution: 'Solution') -> dict:
     }
 
 
-# Attach evaluate method to Solution class
+# Zakaci metodu evaluate() na klasu Solution
+# (tehnicki trik: dodajemo metodu evaluate() klasi Solution spolja, sa kesiranjem)
 def _solution_evaluate(self) -> dict:
-    if self._evaluation is None:
-        self._evaluation = evaluate_solution(self)
-    return self._evaluation
+    if self._evaluation is None:                       # ako ocena jos nije izracunata...
+        self._evaluation = evaluate_solution(self)     # ...izracunaj je i zapamti (kes)
+    return self._evaluation                            # vrati (mozda kesiranu) ocenu
 
-Solution.evaluate = _solution_evaluate
+Solution.evaluate = _solution_evaluate                 # zakaci funkciju kao metodu Solution.evaluate
 
 
 def compute_total_distance(solution: Solution) -> float:
-    """Quick computation of total distance without full evaluation."""
+    """Brzo racunanje samo ukupne kilometraze (bez pune ocene)."""
+    # Brzo sabiranje SAMO kilometraze (bez svih provera) -- koristi se cesto u pretrazi.
     td = 0.0
     for route in solution.routes:
         for i in range(len(route.nodes) - 1):
-            td += solution.instance.dist(route.nodes[i], route.nodes[i + 1])
+            td += solution.instance.dist(route.nodes[i], route.nodes[i + 1])  # saberi sve deonice
     return td
 
 
-def compute_penalty(solution: Solution, w_duration: float = 1.0, 
+def compute_penalty(solution: Solution, w_duration: float = 1.0,
                      w_fuel: float = 1.0, w_capacity: float = 1.0) -> float:
     """
-    Compute penalty for constraint violations.
-    Used in metaheuristic to guide search through infeasible regions.
-    
-    Returns total penalty value (0 if feasible).
+    Izracunaj kaznu za prekrsaje ogranicenja.
+    Koristi se u metaheuristici da vodi pretragu kroz nedozvoljena podrucja.
+
+    Vraca ukupnu vrednost kazne (0 ako je resenje izvodljivo).
     """
+    # ===== KAZNA ZA PREKRSAJE: 0 ako je sve OK; inace srazmerna velicini prekrsaja.
+    #       Omogucava algoritmu da PRIVREMENO prodje kroz nedozvoljena resenja. =====
     instance = solution.instance
     penalty = 0.0
-    
+
     for route in solution.routes:
         eval_data = evaluate_route(route, instance)
-        
-        # Duration violation
-        if eval_data['duration'] > instance.t_max:
-            penalty += w_duration * (eval_data['duration'] - instance.t_max)
-        
-        # Fuel violation: check each segment
-        for fl in eval_data['fuel_levels']:
+
+        # Prekrsaj trajanja
+        if eval_data['duration'] > instance.t_max:     # ako ruta traje duze od T_max...
+            penalty += w_duration * (eval_data['duration'] - instance.t_max)  # kazni za visak vremena
+
+        # Prekrsaj goriva: proveri svaki nivo goriva
+        for fl in eval_data['fuel_levels']:            # za svaki nivo goriva u ruti...
             if fl < -1e-6:
-                penalty += w_fuel * abs(fl)
-    
-    # Capacity violation
-    capacity_feasible, waiting_times = reschedule(instance, solution)
+                penalty += w_fuel * abs(fl)            # kazni za koliko je gorivo otislo u minus
+
+    # Prekrsaj kapaciteta
+    capacity_feasible, waiting_times = reschedule(instance, solution)  # provera reda na pumpi
     if not capacity_feasible:
-        # Sum of excess waiting
+        # Zbir viska cekanja
         total_excess_wait = sum(waiting_times.values()) if waiting_times else 0
-        penalty += w_capacity * (total_excess_wait + 1.0)
-    
+        penalty += w_capacity * (total_excess_wait + 1.0)  # kazni za prekoracenje kapaciteta
+
     return penalty
