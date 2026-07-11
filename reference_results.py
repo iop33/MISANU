@@ -1,0 +1,96 @@
+"""
+Objavljeni REFERENTNI rezultati iz Xu et al. (2025), Tabele II i III.
+
+Za svaku instancu cuvamo:
+    bks   - najbolje poznato resenje (najmanja ukupna kilometraza koju je
+            bilo koji metod postigao u radu)
+    grasp - GRASP Best (reimplementacija iz Xu et al., 30 pokretanja)
+    mets  - METS Best (trenutni state-of-the-art, 30 pokretanja)
+
+Ovi brojevi su nasa REFERENCA: nas GVNS poredimo sa njima (gap do BKS).
+
+Izvor:
+    R. Xu, X. Fan, S. Liu, W. Chen, K. Tang (2025).
+    "Memetic Search for Green Vehicle Routing Problem with Private
+     Capacitated Refueling Stations." arXiv:2504.04527, Tabele II-III.
+
+NAPOMENA: za S-Central, BKS je cesto iz egzaktnog CP-Proactive metoda
+(npr. instance 2, 3, 10), pa je nizi od METS Best. Za M-Central, METS je
+postigao sve nove BKS, pa je tamo bks == mets.
+"""
+
+# ---- S-Central (15 musterija) : Tabela II ----
+# (bks, grasp_best, mets_best)
+S_CENTRAL = {
+    'S-Central_1':  (953.94, 953.94,  953.94),
+    'S-Central_2':  (948.69, 959.88,  959.88),
+    'S-Central_3':  (943.12, 958.94,  958.94),
+    'S-Central_4':  (947.98, 1098.49, 947.98),
+    'S-Central_5':  (714.55, 714.55,  714.55),
+    'S-Central_6':  (844.43, 845.53,  844.43),
+    'S-Central_7':  (862.68, 867.78,  862.68),
+    'S-Central_8':  (712.83, 712.83,  712.83),
+    'S-Central_9':  (855.43, 855.43,  855.43),
+    'S-Central_10': (901.19, 905.59,  905.59),
+}
+
+# ---- M-Central25 : Tabela III (za M-Central bks == mets) ----
+M_CENTRAL25 = {
+    'M-Central25_1':  (1129.71, 1135.96, 1129.71),
+    'M-Central25_2':  (1113.80, 1118.35, 1113.80),
+    'M-Central25_3':  (1320.27, 1324.64, 1320.27),
+    'M-Central25_4':  (1118.87, 1126.69, 1118.87),
+    'M-Central25_5':  (1109.55, 1122.85, 1109.55),
+    'M-Central25_6':  (1089.92, 1092.91, 1089.92),
+    'M-Central25_7':  (1103.82, 1112.69, 1103.82),
+    'M-Central25_8':  (1134.93, 1137.81, 1134.93),
+    'M-Central25_9':  (1275.57, 1288.38, 1275.57),
+    'M-Central25_10': (1311.53, 1320.85, 1311.53),
+}
+
+# ---- M-Central50 ----
+M_CENTRAL50 = {
+    'M-Central50_1':  (2441.41, 2498.19, 2441.41),
+    'M-Central50_2':  (2241.35, 2413.48, 2241.35),
+    'M-Central50_3':  (2230.13, 2268.80, 2230.13),
+    'M-Central50_4':  (2193.74, 2257.60, 2193.74),
+    'M-Central50_5':  (2393.32, 2453.61, 2393.32),
+    'M-Central50_6':  (2380.99, 2446.28, 2380.99),
+    'M-Central50_7':  (2221.61, 2262.98, 2221.61),
+    'M-Central50_8':  (2415.43, 2474.34, 2415.43),
+    'M-Central50_9':  (2241.03, 2409.39, 2241.03),
+    'M-Central50_10': (2402.03, 2436.74, 2402.03),
+}
+
+# ---- M-Central100 ----
+M_CENTRAL100 = {
+    'M-Central100_1':  (4645.27, 4766.64, 4645.27),
+    'M-Central100_2':  (4479.99, 4673.30, 4479.99),
+    'M-Central100_3':  (4447.56, 4527.97, 4447.56),
+    'M-Central100_4':  (4257.75, 4452.41, 4257.75),
+    'M-Central100_5':  (4465.08, 4681.76, 4465.08),
+    'M-Central100_6':  (4257.08, 4468.79, 4257.08),
+    'M-Central100_7':  (4462.69, 4558.80, 4462.69),
+    'M-Central100_8':  (4436.81, 4507.96, 4436.81),
+    'M-Central100_9':  (4507.85, 4705.49, 4507.85),
+    'M-Central100_10': (4366.85, 4496.40, 4366.85),
+}
+
+# Sve zajedno
+REFERENCE = {}
+for _d in (S_CENTRAL, M_CENTRAL25, M_CENTRAL50, M_CENTRAL100):
+    REFERENCE.update(_d)
+
+
+def get_reference(instance_name: str):
+    """Vrati (bks, grasp_best, mets_best) za datu instancu, ili None ako je nema."""
+    return REFERENCE.get(instance_name)
+
+
+def gap_to_bks(our_distance: float, instance_name: str):
+    """Vrati procentualni gap naseg resenja do BKS (pozitivno = mi smo losiji)."""
+    ref = REFERENCE.get(instance_name)
+    if ref is None:
+        return None
+    bks = ref[0]
+    return 100.0 * (our_distance - bks) / bks

@@ -448,3 +448,26 @@ def compute_penalty(solution: Solution, w_duration: float = 1.0,
         penalty += w_capacity * (total_excess_wait + 1.0)  # kazni za prekoracenje kapaciteta
 
     return penalty
+
+
+# =============================================================================
+# ADAPTIVNI KAZNENI FAKTOR -- deli ga CELA pretraga (cena + lokalna pretraga).
+# GVNS ga povecava kad pretraga dugo luta po neizvodljivom prostoru (da je gurne
+# nazad u izvodljivo), a smanjuje kad je vecina resenja izvodljiva.
+# =============================================================================
+PENALTY_WEIGHT = 1000.0          # mnozilac kazne u ceni resenja (pocetna vrednost)
+
+
+def set_penalty_weight(w: float):
+    """Postavi globalni kazneni faktor (koristi ga GVNS za adaptaciju)."""
+    global PENALTY_WEIGHT
+    PENALTY_WEIGHT = float(w)
+
+
+def penalized_cost(solution: Solution) -> float:
+    """
+    Jedinstvena CENA resenja = kilometraza + PENALTY_WEIGHT * kazna.
+    Sve (i GVNS i lokalna pretraga) racunaju cenu OVDE, da adaptacija kazne
+    deluje dosledno na celu pretragu.
+    """
+    return compute_total_distance(solution) + PENALTY_WEIGHT * compute_penalty(solution)

@@ -35,21 +35,26 @@ import numpy as np                                      # statistika + seed
 from typing import List, Tuple, Optional, Callable      # oznake tipova
 from instance import Instance
 from solution import (Solution, Route, compute_total_distance,
-                      evaluate_solution, compute_penalty)
-from construction import greedy_construction, savings_construction, insert_station_if_needed
+                      evaluate_solution, compute_penalty, penalized_cost,
+                      set_penalty_weight)
+from construction import (greedy_construction, savings_construction,
+                          insert_station_if_needed, scts_construction)
 from neighborhoods import (
     SHAKE_NEIGHBORHOODS, LOCAL_SEARCH_NEIGHBORHOODS,
     fix_stations, relocate_best, swap_best, two_opt_intra_best,
 )
 
+# ---- Granice adaptivnog kaznenog faktora ----
+PENALTY_INIT = 1000.0      # pocetni faktor (svaki run krece odavde)
+PENALTY_MAX = 1.0e5        # gornja granica (da ne eksplodira)
+PENALTY_MIN = 1000.0       # donja granica
+ADAPT_PERIOD = 30          # na svakih toliko shaking-iteracija proveravamo udeo izvodljivih
+
 
 def solution_cost(solution: Solution) -> float:
-    """Izracunaj cenu resenja (kilometraza + kazna za neizvodljivost)."""
-    # CENA RESENJA = kilometraza + 1000 * kazna.
-    # Faktor 1000 znaci: izbegavaj neizvodljivost po svaku cenu (ali smes proci kroz nju).
-    dist = compute_total_distance(solution)             # kilometraza
-    penalty = compute_penalty(solution)                 # kazna za prekrsaje (0 ako je sve OK)
-    return dist + 1000 * penalty
+    """Cena resenja = kilometraza + (adaptivni) PENALTY_WEIGHT * kazna."""
+    # Jedinstvena tacka racuna cene -> adaptacija kazne deluje i na GVNS i na lokalnu pretragu.
+    return penalized_cost(solution)
 
 
 def is_feasible(solution: Solution) -> bool:
@@ -127,6 +132,9 @@ def gvns(instance: Instance,
         random.seed(seed)                               # fiksiraj slucajnost -> ponovljivost
         np.random.seed(seed)
 
+    set_penalty_weight(PENALTY_INIT)                    # RESETUJ kazneni faktor na pocetak svakog run-a
+    penalty_weight = PENALTY_INIT                       # lokalna kopija (za adaptaciju)
+
     start_time = time.time()                            # pocni stopericu
 
     # Pracenje statistike
@@ -138,19 +146,35 @@ def gvns(instance: Instance,
         'feasible_found': False,
     }
 
+    # ---- Pracenje najboljeg IZVODLJIVOG resenja (vraca se na kraju) ----
+    best_feasible = None                                # najbolje IZVODLJIVO resenje do sada
+    best_feasible_dist = float('inf')                   # njegova kilometraza
+    feas_window = []                                    # poslednjih nekoliko (ne)izvodljivih -> za adaptaciju kazne
+
+    def _track_feasible(sol):
+        """Ako je 'sol' izvodljivo i krace od dosadasnjeg najboljeg izvodljivog -> zapamti ga."""
+        nonlocal best_feasible, best_feasible_dist
+        ev = evaluate_solution(sol)
+        if ev['feasible']:
+            if ev['total_distance'] < best_feasible_dist - 1e-9:
+                best_feasible = sol.copy()
+                best_feasible_dist = ev['total_distance']
+            return True
+        return False
+
     # Napravi pocetno resenje
     if verbose:
         print("Generating initial solution...")
 
-    best_solution = greedy_construction(instance)       # POCETNO resenje 1: pohlepno
-    best_solution = fix_stations(best_solution)         # sredi punionice
-
-    # Probaj i konstrukciju po ustedama
-    savings_sol = savings_construction(instance)        # POCETNO resenje 2: Clarke & Wright
-    savings_sol = fix_stations(savings_sol)
-
-    if solution_cost(savings_sol) < solution_cost(best_solution):
-        best_solution = savings_sol                     # uzmi BOLJE od dva pocetna resenja
+    # Tri razlicita pocetna resenja -> uzmi najbolje (i zapamti ako je neko izvodljivo)
+    candidates = [
+        fix_stations(greedy_construction(instance)),    # 1: pohlepno (najblizi sused)
+        fix_stations(savings_construction(instance)),   # 2: Clarke & Wright (ustede)
+        scts_construction(instance),                    # 3: SCTS podela giant tour-a po Tmax
+    ]
+    best_solution = min(candidates, key=solution_cost)  # uzmi najbolje od tri pocetna
+    for cand in candidates:
+        _track_feasible(cand)                           # zapamti ako je neki vec izvodljiv
 
     best_cost = solution_cost(best_solution)            # cena najboljeg do sada
     current = best_solution.copy()                      # trenutno resenje (radna kopija)
@@ -196,6 +220,12 @@ def gvns(instance: Instance,
 
             neighbor_cost = solution_cost(neighbor)
 
+            # Zapamti ako je 'neighbor' izvodljivo (i krace) + evidentiraj za adaptaciju kazne
+            feas_now = _track_feasible(neighbor)
+            feas_window.append(feas_now)
+            if best_feasible is not None:
+                stats['feasible_found'] = True
+
             # ---- POMERI ILI NE ----
             if neighbor_cost < current_cost - 1e-6:     # da li je novo resenje BOLJE?
                 current = neighbor
@@ -203,15 +233,12 @@ def gvns(instance: Instance,
                 k = 0                                   # da -> prihvati i vrati se na prvu okolinu
                 no_improve_count = 0
 
-                # Azuriraj najbolje
+                # Azuriraj najbolje (po ceni, sme biti i privremeno neizvodljivo)
                 if current_cost < best_cost - 1e-6:     # da li je novi REKORD?
                     best_solution = current.copy()
                     best_cost = current_cost
                     stats['improvements'] += 1
                     stats['time_to_best'] = time.time() - start_time  # kada smo nasli najbolje
-
-                    if is_feasible(best_solution):
-                        stats['feasible_found'] = True
 
                     if verbose and iteration % 10 == 0:
                         eval_data = evaluate_solution(best_solution)
@@ -225,24 +252,49 @@ def gvns(instance: Instance,
 
             stats['best_costs'].append(best_cost)
 
+            # ---- ADAPTACIJA KAZNE: gurni pretragu ka izvodljivom prostoru ----
+            if iteration % ADAPT_PERIOD == 0 and len(feas_window) >= ADAPT_PERIOD:
+                ratio = sum(feas_window[-ADAPT_PERIOD:]) / ADAPT_PERIOD  # udeo izvodljivih u prozoru
+                old_w = penalty_weight
+                if ratio < 0.15:                        # skoro nista izvodljivo -> POJACAJ kaznu
+                    penalty_weight = min(PENALTY_MAX, penalty_weight * 1.5)
+                elif ratio > 0.6:                       # vecina izvodljiva -> POPUSTI (trazi krace rute)
+                    penalty_weight = max(PENALTY_MIN, penalty_weight / 1.3)
+                if penalty_weight != old_w:
+                    set_penalty_weight(penalty_weight)
+                    # cene su sad u drugoj skali -> preracunaj referentne cene
+                    current_cost = solution_cost(current)
+                    best_cost = solution_cost(best_solution)
+
         # Restart ako smo zaglavili
         if no_improve_count >= max_no_improve:          # ako dugo nema napretka -> RESTART
             if verbose:
                 print(f"  Restarting at iter {iteration} (no improvement for {no_improve_count} iters)")
 
-            # Perturbacija: napravi novo resenje i kreni iznova
-            current = _perturb(best_solution, instance)  # jak trzaj (izbaci pa vrati 30-50% musterija)
+            # Restart: pola puta SCTS ponovna podela (nova struktura ruta, izvodljiva po Tmax),
+            # pola puta jak trzaj (ruin-recreate) -> raznovrsnost
+            if random.random() < 0.5:
+                current = scts_construction(instance, randomized=True)
+            else:
+                current = _perturb(best_solution, instance)
             current = fix_stations(current)
+            _track_feasible(current)                     # mozda je restart vec izvodljiv
             current_cost = solution_cost(current)
             no_improve_count = 0
+
+    # ---- IZBOR REZULTATA: vrati najbolje IZVODLJIVO ako postoji ----
+    # (inace najbolje po ceni, koje moze biti neizvodljivo -> da pozivalac to vidi)
+    result_solution = best_feasible if best_feasible is not None else best_solution
 
     elapsed = time.time() - start_time
     stats['total_time'] = elapsed
 
-    eval_data = evaluate_solution(best_solution)        # finalna ocena najboljeg resenja
+    eval_data = evaluate_solution(result_solution)      # finalna ocena vracenog resenja
     stats['final_distance'] = eval_data['total_distance']
     stats['final_feasible'] = eval_data['feasible']
     stats['final_n_routes'] = eval_data['n_routes']
+    stats['feasible_found'] = best_feasible is not None
+    stats['best_feasible_distance'] = best_feasible_dist if best_feasible is not None else None
 
     if verbose:
         print(f"\nGVNS completed:")
@@ -254,7 +306,7 @@ def gvns(instance: Instance,
         print(f"  Routes: {stats['final_n_routes']}")
         print(f"  Time to best: {stats['time_to_best']:.2f}s")
 
-    return best_solution, stats                         # vrati najbolje resenje + statistiku
+    return result_solution, stats                       # vrati najbolje IZVODLJIVO (ili najbolje po ceni)
 
 
 def _perturb(solution: Solution, instance: Instance) -> Solution:

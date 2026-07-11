@@ -30,7 +30,7 @@ import math                                             # (uvezeno)
 from typing import List, Tuple, Optional                # oznake tipova
 from instance import Instance
 from solution import (Route, Solution, evaluate_route, compute_total_distance,
-                      evaluate_solution, compute_penalty)
+                      evaluate_solution, compute_penalty, penalized_cost)
 from construction import find_nearest_feasible_station, insert_station_if_needed
 
 
@@ -128,9 +128,7 @@ def relocate_best(solution: Solution) -> Solution:
     # NAJBOLJI relocate: probaj SVAKU musteriju na SVAKO mesto, vrati najjeftinije.
     instance = solution.instance
     best_sol = solution
-    best_dist = compute_total_distance(solution)
-    best_penalty = compute_penalty(solution)
-    best_cost = best_dist + 1000 * best_penalty         # cena = kilometraza + 1000*kazna
+    best_cost = penalized_cost(solution)                # cena = kilometraza + PENALTY_WEIGHT*kazna
 
     # Probaj sva premestanja musterija
     for r_idx, route in enumerate(solution.routes):
@@ -158,9 +156,7 @@ def relocate_best(solution: Solution) -> Solution:
                     sol.routes[t_idx].insert(actual_t_pos, customer)  # ubaci na novo mesto
                     sol.remove_empty_routes()
 
-                    dist = compute_total_distance(sol)
-                    penalty = compute_penalty(sol)
-                    cost = dist + 1000 * penalty
+                    cost = penalized_cost(sol)
 
                     if cost < best_cost - 1e-6:         # ako je jeftinije -> zapamti
                         best_cost = cost
@@ -202,7 +198,7 @@ def swap_best(solution: Solution) -> Solution:
     # NAJBOLJA zamena: probaj svaki par musterija, vrati najjeftiniju zamenu.
     instance = solution.instance
     best_sol = solution
-    best_cost = compute_total_distance(solution) + 1000 * compute_penalty(solution)
+    best_cost = penalized_cost(solution)
 
     positions = []
     for r_idx, route in enumerate(solution.routes):
@@ -219,9 +215,7 @@ def swap_best(solution: Solution) -> Solution:
             sol.routes[r1].nodes[p1], sol.routes[r2].nodes[p2] = \
                 sol.routes[r2].nodes[p2], sol.routes[r1].nodes[p1]  # probna zamena
 
-            dist = compute_total_distance(sol)
-            penalty = compute_penalty(sol)
-            cost = dist + 1000 * penalty
+            cost = penalized_cost(sol)
 
             if cost < best_cost - 1e-6:
                 best_cost = cost
@@ -320,7 +314,7 @@ def two_opt_intra_best(solution: Solution) -> Solution:
     # NAJBOLJI 2-opt: probaj sve parove (i,j) u svim rutama, vrati najbolju obrnutu varijantu.
     instance = solution.instance
     best_sol = solution
-    best_cost = compute_total_distance(solution) + 1000 * compute_penalty(solution)
+    best_cost = penalized_cost(solution)
 
     for r_idx, route in enumerate(solution.routes):
         n = len(route.nodes)
@@ -332,9 +326,7 @@ def two_opt_intra_best(solution: Solution) -> Solution:
                 sol = solution.copy()
                 sol.routes[r_idx].nodes[i:j+1] = sol.routes[r_idx].nodes[i:j+1][::-1]  # probno obrtanje
 
-                dist = compute_total_distance(sol)
-                penalty = compute_penalty(sol)
-                cost = dist + 1000 * penalty
+                cost = penalized_cost(sol)
 
                 if cost < best_cost - 1e-6:
                     best_cost = cost

@@ -289,6 +289,75 @@ def savings_construction(instance: Instance) -> Solution:
     return solution
 
 
+def _nearest_neighbor_order(instance: Instance, start: int = None,
+                            randomized: bool = False) -> List[int]:
+    """Napravi 'giant tour' redosled musterija po pravilu najblizeg suseda."""
+    import random
+    customers = set(instance.customer_indices)
+    order = []
+    # pocetna musterija: zadata, ili najbliza depou, ili nasumicna (za diverzitet)
+    if start is None:
+        if randomized:
+            current = random.choice(list(customers))
+        else:
+            current = min(customers, key=lambda c: instance.dist(0, c))
+    else:
+        current = start
+    order.append(current)
+    customers.discard(current)
+    while customers:
+        if randomized and random.random() < 0.3:
+            # povremeno nasumican skok (diverzitet giant tour-a)
+            nxt = random.choice(list(customers))
+        else:
+            nxt = min(customers, key=lambda c: instance.dist(current, c))
+        order.append(nxt)
+        customers.discard(nxt)
+        current = nxt
+    return order
+
+
+def _make_route(instance: Instance, customers: List[int]) -> Route:
+    """Napravi rutu od liste musterija (depo na krajevima) i ubaci punionice gde treba."""
+    route = Route([0] + list(customers) + [0])
+    return insert_station_if_needed(route, instance)
+
+
+def scts_construction(instance: Instance, randomized: bool = False) -> Solution:
+    """
+    SCTS-stil konstrukcija (po uzoru na Xu et al. 2025, splitTmax).
+
+    Napravi 'giant tour' (redosled svih musterija), pa ga deli na rute tako da
+    SVAKA ruta postuje T_max: dodaje musterije u tekucu rutu dok ne bi prekoracila
+    T_max (uz ubacivanje punionice radi goriva), pa otvara novu rutu.
+
+    Ovim se direktno dobijaju rute izvodljive po TRAJANJU -- kljucno za tesne
+    instance gde obican relocate/swap ne uspeva da izbalansira trajanja.
+    (Zagusenje na punionici resava se kasnije kroz reschedule + kaznu.)
+    """
+    order = _nearest_neighbor_order(instance, randomized=randomized)
+    routes = []
+    cur = []                                            # musterije tekuce rute
+
+    for c in order:
+        trial = cur + [c]
+        route = _make_route(instance, trial)
+        ev = evaluate_route(route, instance)
+        ok = ev['fuel_feasible'] and ev['duration'] <= instance.t_max + 1e-6
+        if ok:
+            cur = trial                                 # stane u tekucu rutu
+        else:
+            if cur:
+                routes.append(_make_route(instance, cur))  # zatvori tekucu rutu
+            cur = [c]                                    # nova ruta krece od c
+            # ako ni sam c ne staje, svejedno ga ostavljamo (nista bolje ne moze)
+
+    if cur:
+        routes.append(_make_route(instance, cur))
+
+    return Solution(instance, routes)
+
+
 def insert_station_if_needed(route: Route, instance: Instance) -> Route:
     """
     Naknadna obrada rute: ubaci posete punionici tamo gde gorivo ponestaje.
