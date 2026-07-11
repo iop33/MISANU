@@ -1,8 +1,0 @@
-{
-  "timestamp": "2026-06-19T10:34:25.731827",
-  "n_runs": 5,
-  "time_limit_per_run": 120.0,
-  "n_instances": 10,
-  "set": "all",
-  "algorithm": "GVNS"
-}

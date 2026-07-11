@@ -1,127 +1,75 @@
-# GrVRP-PCAFS: Green Vehicle Routing Problem with Private Capacitated Alternative Fuel Stations
+# MISANU — GrVRP-PCAFS: naš GVNS vs Xu-ov METS (oba u C++)
 
-## Overview
+Rešavanje **Green Vehicle Routing Problem with Private Capacitated Alternative Fuel
+Stations (GrVRP-PCAFS)** — problem rutiranja vozila na alternativna goriva gde
+punionica prima ograničen broj vozila istovremeno.
 
-This project implements a **General Variable Neighborhood Search (GVNS)** metaheuristic for solving the Green Vehicle Routing Problem with Private Capacitated Alternative Fuel Stations (GrVRP-PCAFS), also known as GVRP-CAFS.
+Repozitorijum sadrži **dva algoritma u C++**, na **istim instancama** i **istom
+protokolu**, pa su rezultati direktno uporedivi:
 
-### Problem Description
+| Folder | Algoritam | Poreklo |
+|---|---|---|
+| `gvrp_pcafs_gvns/` | **GVNS** (General Variable Neighborhood Search) — naš algoritam | prevod našeg Python prototipa (istorija u git-u) |
+| `mets_cpp/` | **METS** (Memetic Search) — trenutni state-of-the-art | prevod MATLAB koda iz Xu et al., IEEE TEVC 2025 ([GitHub](https://github.com/FXBZ-research/METS-Algorithm)) |
 
-Route a fleet of Alternative Fuel Vehicles (AFVs) to serve a set of customers while:
-- Minimizing total travel distance
-- Respecting limited driving range (vehicles must refuel at Alternative Fuel Stations)
-- Respecting maximum route duration
-- Managing **limited capacity at fuel stations** (only η_s vehicles can refuel simultaneously)
+Instance: **40 javnih benchmark instanci** iz Xu-ovog repozitorijuma
+(S-Central 15 mušt. + M-Central 25/50/100), u `*/data/instances/`.
 
-### Key References
+---
 
-1. **Bruglieri, M., Mancini, S. & Pisacane, O.** (2019). The green vehicle routing problem with capacitated alternative fuel stations. *Computers & Operations Research*, 112, 104759.
-   - Introduces the GVRP-CAFS problem with MILP formulations
+## Pokretanje
 
-2. **Xu, R., Fan, X., Liu, S., Chen, W. & Tang, K.** (2025). Memetic Search for Green Vehicle Routing Problem with Private Capacitated Refueling Stations. *arXiv:2504.04527*.
-   - State-of-the-art METS algorithm; benchmark instances
-
-3. **Bruglieri, M., Ferone, D., Festa, P. & Pisacane, O.** (2025). An effective and efficient matheuristic for the electric vehicle routing problem with capacitated recharging stations. *International Transactions in Operational Research*.
-   - MILP-based ALNS matheuristic for the EVRPTW-CRS variant
-
-## Project Structure
-
-```
-gvrp_cafs/
-├── instance.py              # Instance data model and I/O
-├── solution.py              # Solution representation, evaluation, Reschedule procedure
-├── construction.py          # Greedy and savings construction heuristics
-├── neighborhoods.py         # Neighborhood structures (relocate, swap, 2-opt, etc.)
-├── gvns.py                  # GVNS algorithm implementation
-├── generate_instances.py    # Benchmark instance generator
-├── main.py                  # Main experiment runner
-├── results_analysis.py      # Results formatting, CSV/LaTeX export
-└── README.md                # This file
-```
-
-## Algorithm: GVNS
-
-The GVNS metaheuristic proceeds as follows:
-
-1. **Initialization**: Greedy nearest-neighbor + savings-based construction
-2. **Main loop** (until time limit):
-   - **Shaking**: Random perturbation in neighborhood N_k
-   - **Local search (VND)**: Sequential best-improvement with relocate, swap, 2-opt
-   - **Move decision**: Accept if improvement, otherwise try next neighborhood
-3. **Restart**: Perturbation when stuck
-
-### Neighborhood Structures
-
-**Shaking (diversification):**
-- N1: Customer relocate (random)
-- N2: Customer swap (random)
-- N3: Or-opt (move segment of 1-3 customers)
-- N4: 2-opt intra-route (reverse segment)
-- N5: 2-opt* inter-route (exchange tails)
-- N6: Station insert/remove/change
-
-**Local Search (intensification):**
-- Best relocate
-- Best swap
-- Best 2-opt intra-route
-
-### AFS Capacity Management
-
-The Reschedule procedure (from Xu et al., 2025) handles the limited station capacity:
-- For each AFS, all vehicle visits are collected with arrival times
-- If overlaps exceed station capacity, vehicles are delayed
-- Feasibility is checked against T_max after rescheduling
-
-## Benchmark Instance Sets
-
-| Set | Customers | AFSs | Vehicles | η_s | T_max | D_max |
-|-----|-----------|------|----------|-----|-------|-------|
-| S-Central | 15 | 1 | 15 | 1 | 7h | 250 mi |
-| M-Central25 | 25 | 1 | 7 | 2 | 7.5h | 250 mi |
-| M-Central50 | 50 | 1 | 13 | 3 | 7.5h | 250 mi |
-| M-Central100 | 100 | 1 | 25 | 8 | 7.5h | 250 mi |
-| Triangle | 15 | 3 | 10 | 1 | 11h | 250 mi |
-| EMH | 20 | 6 | 8 | 1 | 11h | 300 mi |
-
-## Usage
-
-### Quick Test
+### Opcija A — jedan skript, oba algoritma (preporučeno)
 ```bash
-cd gvrp_cafs
-python main.py --quick
+./run_all.sh                     # pun eksperiment: svi setovi, 5 ponavljanja (~2-3h)
+./run_all.sh --set S-Central     # brza proba na malom setu (~20 min)
+./run_all.sh --set S-Central --n-runs 1 --time-limit 5   # ekspresna provera (~2 min)
+```
+Izvrši **oba** algoritma sa istim parametrima. **Analize se automatski čuvaju** u
+`results/gvns_<vreme>.txt` i `results/mets_<vreme>.txt`.
+
+### Opcija B — CLion
+1. **File → Open** → izaberi ovaj folder (`MISANU`). CLion učita koreni `CMakeLists.txt`.
+2. U Run meniju biraš metu: `gvrp_pcafs_gvns` (naš) ili `mets_cpp` (Xu).
+3. **Run** bez argumenata = pun eksperiment tog algoritma; analiza se **automatski
+   čuva** u `results/` (program sam upisuje sve što ispiše).
+
+### Argumenti (oba programa)
+```
+--set S-Central|M-Central25|M-Central50|M-Central100|all
+--n-runs N          # ponavljanja po instanci (default 5, skraćeno sa 30 iz rada)
+--time-limit S      # sekundi po pokretanju (default po setu: 12/20/30/45)
+--seed N            # bazni seed (default 1); run r koristi seed N+r
+```
+`mets_cpp` dodatno: `--inst S-Central_5` (jedna instanca, brza provera vernosti —
+očekivano ~714.55).
+
+---
+
+## Protokol eksperimenta (dogovoren sa mentorom)
+- **Poređenje sa Xu-om**: obe tabele prikazuju objavljene **BKS / GRASP / METS**
+  brojeve (Tabele II–III rada) i gap% naspram njih.
+- **5 ponavljanja** po instanci (umesto 30 iz rada — kraće, a dovoljno za poređenje).
+- **Kontrolisan seed**: sva slučajnost je deterministička; run `r` koristi seed
+  `base+r`. Isti seed ⇒ bit-identičan rezultat (provereno) → lako debagovanje.
+- **Ista matrica rastojanja** (euklidska, zaokružena na 2 decimale kao u METS-u) i
+  **isti CPU budžet** po instanci za oba algoritma.
+
+## Validacija METS prevoda (vernost)
+C++ prevod METS-a reprodukuje objavljene brojeve: na S-Central **9/10 instanci
+tačno ili unutar 0.5%** (npr. 714.55, 712.83, 953.94 — tačno na 2 decimale);
+na M-Central25 prosečan gap **0.29%**. Detalji u `mets_cpp/README.md`;
+specifikacije prevoda u `mets_cpp/specs/`.
+
+## Struktura
+```
+CMakeLists.txt          # koreni build (obe mete)
+run_all.sh              # pokreni oba algoritma + sacuvaj analize
+gvrp_pcafs_gvns/        # nas GVNS (src/, data/instances/, README.md)
+mets_cpp/               # Xu METS prevod (src/, data/instances/, specs/, README.md)
+results/                # automatski sacuvane analize (git-ignorisano)
 ```
 
-### Full Experiment
-```bash
-python main.py --n-runs 5 --time-limit 120 --n-instances 10
-```
-
-### Specific Instance Set
-```bash
-python main.py --set S-Central --n-runs 10 --time-limit 300
-```
-
-### Command Line Options
-```
---quick          Quick test mode (reduced parameters)
---set            Instance set to run (all, S-Central, M-Central25, etc.)
---n-runs         Number of independent runs per instance (default: 5)
---time-limit     Time limit per run in seconds (default: 120)
---n-instances    Number of instances per set (default: 10)
---output-dir     Output directory (default: results)
---quiet          Minimal output
-```
-
-## Output
-
-Results are saved to the `results/` directory:
-- `results/<set>/results.csv` - Results in CSV format
-- `results/<set>/results_table.txt` - Formatted text table
-- `results/<set>/results_latex.tex` - LaTeX table for paper
-- `results/<set>/<instance>_solution.json` - Best solution details
-- `results/summary.txt` - Summary across all sets
-- `results/all_results.json` - All results in JSON format
-
-## Requirements
-
-- Python 3.8+
-- NumPy
+## Istorija
+Python prototip (GVNS + učitavači instanci + eksperimenti) je u git istoriji —
+grana `claude/epic-hopper-7302f5` i raniji commit-i na `main`.

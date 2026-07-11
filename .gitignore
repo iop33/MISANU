@@ -1,4 +1,19 @@
+# build artefakti
+build/
+cmake-build-*/
+*.o
+
+# automatski sacuvane analize (lokalni izvestaji; po zelji ukloni ovu liniju da ih pushujes)
+results/
+
+# IDE / sistem
+.idea/
+.DS_Store
 .claude/
+
+# python ostaci (istorija u git-u)
 __pycache__/
 *.pyc
 .venv/
+gvrp_pcafs_gvns/gvrp
+mets_test
