@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
     if (argc == 1) {
         set = "all";
         std::cout << "[Run bez argumenata -> PUN eksperiment: svi setovi (S-Central + M-Central 25/50/100),\n"
-                  << " sve 40 instanci, 5 ponavljanja po instanci (skraceno sa 30 iz rada). Traje ~1-1.5h.]\n"
+                  << " sve 40 instanci, 5 ponavljanja po instanci (skraceno sa 30 iz rada). Traje ~3h.]\n"
                   << "[Seed: deterministicki, run r = seed " << base_seed << "+r; promena: --seed N]\n"
                   << "[Za brzu proveru jedne instance: Program arguments = --inst S-Central_5]\n\n";
     }
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
 
     auto default_tl = [](const std::string& s){
         if (s=="S-Central") return 12.0; if (s=="M-Central25") return 20.0;
-        if (s=="M-Central50") return 30.0; return 45.0; };
+        if (s=="M-Central50") return 60.0; return 120.0; };
 
     // brza provera jedne instance (npr. --inst S-Central_5 ocekivano ~714.55)
     if (!single.empty()) {

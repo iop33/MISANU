@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
     if (argc == 1) {
         set = "all";
         std::cout << "[Run bez argumenata -> PUN eksperiment: svi setovi, 40 instanci, 5 ponavljanja.\n"
-                  << " Isti protokol kao mets_cpp -> rezultati direktno uporedivi. Traje ~1-1.5h.]\n"
+                  << " Isti protokol kao mets_cpp -> rezultati direktno uporedivi. Traje ~3h.]\n"
                   << "[Seed: deterministicki, run r = seed " << base_seed << "+r; promena: --seed N]\n\n";
     }
     for (int i = 1; i < argc; ++i) {
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     // Vremenski budzeti IDENTICNI mets_cpp (fer poredjenje: isti CPU budzet po instanci).
     auto default_tl = [](const std::string& s){
         if (s=="S-Central") return 12.0; if (s=="M-Central25") return 20.0;
-        if (s=="M-Central50") return 30.0; return 45.0; };
+        if (s=="M-Central50") return 60.0; return 120.0; };
 
     for (auto& sname : sets) {
         double tl = (time_limit > 0) ? time_limit : default_tl(sname);

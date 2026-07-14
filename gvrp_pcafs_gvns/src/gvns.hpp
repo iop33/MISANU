@@ -17,10 +17,16 @@ struct GvnsResult {
     double time_to_best = 0;
 };
 
-inline Solution vnd(const Instance& ins, Solution sol) {
+// VND lokalna pretraga. 'deadline': TVRDI vremenski prekid -- bez njega bi na
+// velikim instancama (50-100 musterija) jedan VND mogao da traje minutima i
+// visestruko probije --time-limit (uoceno kao visesatno izvrsavanje).
+inline Solution vnd(const Instance& ins, Solution sol,
+                    std::chrono::steady_clock::time_point deadline
+                        = std::chrono::steady_clock::time_point::max()) {
     double cost = penalized_cost(ins, sol);
     int k = 0;
     while (k < 3) {
+        if (std::chrono::steady_clock::now() >= deadline) break;   // postuj rok
         Solution nb;
         if (k == 0) nb = relocate_best(ins, sol);
         else if (k == 1) nb = swap_best(ins, sol);
@@ -59,6 +65,9 @@ inline GvnsResult gvns(const Instance& ins, double time_limit, int max_no_improv
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     auto elapsed = [&]{ return std::chrono::duration<double>(clock::now() - t0).count(); };
+    // TVRDI rok za ceo run -- postuje ga i VND (prekida se usred pretrage).
+    auto deadline = t0 + std::chrono::duration_cast<clock::duration>(
+                             std::chrono::duration<double>(time_limit));
     std::mt19937 rng(seed);
 
     PENALTY_WEIGHT = 1000.0;                         // reset po run-u
@@ -102,7 +111,7 @@ inline GvnsResult gvns(const Instance& ins, double time_limit, int max_no_improv
             ++iteration;
             Solution neighbor = shakes[k](ins, current, rng);
             neighbor = fix_stations(neighbor, ins);
-            neighbor = vnd(ins, neighbor);
+            neighbor = vnd(ins, neighbor, deadline);
             double nc = penalized_cost(ins, neighbor);
 
             feas_window.push_back(track(neighbor) ? 1 : 0);

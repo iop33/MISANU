@@ -33,6 +33,9 @@ inline MetsResult run_mets(const Instance& I, const MetsParams& P, unsigned seed
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     auto elapsed = [&]{ return std::chrono::duration<double>(clock::now() - t0).count(); };
+    // TVRDI rok za CEO run: i lokalna pretraga ga postuje (prekida se usred prolaza).
+    auto deadline = t0 + std::chrono::duration_cast<clock::duration>(
+                             std::chrono::duration<double>(P.timeLimit));
     std::mt19937 rng(seed);
 
     Weights W; W.wT = P.PT; W.wC = P.PC; W.wD = P.PD; W.wM = 0;
@@ -64,7 +67,7 @@ inline MetsResult run_mets(const Instance& I, const MetsParams& P, unsigned seed
         if (e0.feasible) return;
         Weights Wr = W;
         if (e0.pT > 0) Wr.wT *= 10; if (e0.pC > 0) Wr.wC *= 10; if (e0.pD > 0) Wr.wD *= 10;
-        local_search(I, routes, Wr, gran, rng);
+        local_search(I, routes, Wr, gran, rng, deadline);
         Individual ind = make_individual(I, routes, W);
         if (ind.feasible) { pop.add(ind); update_best(ind); }
     };
@@ -79,7 +82,7 @@ inline MetsResult run_mets(const Instance& I, const MetsParams& P, unsigned seed
         std::vector<int> tsp = base; std::shuffle(tsp.begin(), tsp.end(), rng);
         Solution split = (U01(rng) < P.split_prob) ? split_Dmax(I, tsp) : split_Tmax(I, tsp);
         SolC routes; for (auto& r : split) { std::vector<int> cust; for (int n : r) if (!is_afs(I, n)) cust.push_back(n); if (!cust.empty()) routes.push_back(cust); }
-        local_search(I, routes, W, gran, rng);
+        local_search(I, routes, W, gran, rng, deadline);
         Individual ind = make_individual(I, routes, W);
         pop.add(ind); update_best(ind);
         push_window(eval_customers(I, routes, W));
@@ -96,7 +99,7 @@ inline MetsResult run_mets(const Instance& I, const MetsParams& P, unsigned seed
         std::vector<int> off = ox_crossover(p1.tour, p2.tour, I.n_customers, rng);
         Solution split = (U01(rng) < 0.5) ? split_Dmax(I, off) : split_Tmax(I, off);
         SolC routes; for (auto& r : split) { std::vector<int> cust; for (int n : r) if (!is_afs(I, n)) cust.push_back(n); if (!cust.empty()) routes.push_back(cust); }
-        local_search(I, routes, W, gran, rng);
+        local_search(I, routes, W, gran, rng, deadline);
         Individual ind = make_individual(I, routes, W);
         pop.add(ind);
         bool newbest = update_best(ind);

@@ -21,7 +21,7 @@ Instance: **40 javnih benchmark instanci** iz Xu-ovog repozitorijuma
 
 ### Opcija A — jedan skript, oba algoritma (preporučeno)
 ```bash
-./run_all.sh                     # pun eksperiment: svi setovi, 5 ponavljanja (~2-3h)
+./run_all.sh                     # pun eksperiment: svi setovi, 5 ponavljanja (~6h za oba)
 ./run_all.sh --set S-Central     # brza proba na malom setu (~20 min)
 ./run_all.sh --set S-Central --n-runs 1 --time-limit 5   # ekspresna provera (~2 min)
 ```
@@ -38,7 +38,7 @@ Izvrši **oba** algoritma sa istim parametrima. **Analize se automatski čuvaju*
 ```
 --set S-Central|M-Central25|M-Central50|M-Central100|all
 --n-runs N          # ponavljanja po instanci (default 5, skraćeno sa 30 iz rada)
---time-limit S      # sekundi po pokretanju (default po setu: 12/20/30/45)
+--time-limit S      # sekundi po pokretanju (default po setu: 12/20/60/120)
 --seed N            # bazni seed (default 1); run r koristi seed N+r
 ```
 `mets_cpp` dodatno: `--inst S-Central_5` (jedna instanca, brza provera vernosti —
@@ -72,4 +72,4 @@ results/                # automatski sacuvane analize (git-ignorisano)
 
 ## Istorija
 Python prototip (GVNS + učitavači instanci + eksperimenti) je u git istoriji —
-grana `claude/epic-hopper-7302f5` i raniji commit-i na `main`.
+u ranijim commit-ima na `main` grani.

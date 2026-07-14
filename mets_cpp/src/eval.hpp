@@ -244,15 +244,31 @@ inline std::pair<Solution, EvalResult> eval_afs_opt(const Instance& I,
         int afs_routes = 0; for (int p : pos) if (p >= 0) ++afs_routes;
         if (e0.pC <= 1e-9 || afs_routes < 2) return { s0, e0 };
     }
-    // koordinatni spust: menjaj AFS poziciju rute po rute da smanjis ukupnu cenu (sa PC)
+    // Koordinatni spust: menjaj AFS poziciju rute po rute da smanjis ukupnu cenu (sa PC).
+    // OGRANICENJA RADI BRZINE (kljucno na 50-100 musterija, gde se ovo zove za svaki
+    // kandidat-potez lokalne pretrage): max 3 prolaza, a za duge rute probaj samo
+    // pozicije oko trenutne (+-2) plus krajeve -- timing se menja postepeno po
+    // pozicijama, pa lokalni pomeraji nose skoro svu korist.
     auto cost_at = [&](const std::vector<int>& p){ return evaluate(I, build_with_afs(I, cust, p), W).cost; };
     double cur = cost_at(pos);
     bool improved = true; int guard = 0;
-    while (improved && guard++ < 50) {
+    while (improved && guard++ < 3) {
         improved = false;
         for (int r = 0; r < R; ++r) {
+            int len = (int)cust[r].size();
+            // kandidat pozicije: sve ako je ruta kratka; inace okolina trenutne + krajevi
+            std::vector<int> cands;
+            if (len <= 8) { for (int p = -1; p <= len; ++p) cands.push_back(p); }
+            else {
+                cands.push_back(-1); cands.push_back(0); cands.push_back(len);
+                for (int d = -2; d <= 2; ++d) {
+                    int p = pos[r] + d;
+                    if (p >= 0 && p <= len) cands.push_back(p);
+                }
+            }
             int bestp = pos[r]; double bestc = cur;
-            for (int p = -1; p <= (int)cust[r].size(); ++p) {
+            for (int p : cands) {
+                if (p == pos[r]) continue;
                 if (p >= 0 && !afs_pos_ok(I, cust[r], p)) continue;      // preskoci Dmax-nevalidne
                 if (p == -1) { LegInfo L0 = get_pd_pt(I, cust[r]); if (L0.d1 > I.d_max + 1e-9) continue; }
                 std::vector<int> trial = pos; trial[r] = p;

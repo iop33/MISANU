@@ -11,6 +11,7 @@
 #include <vector>
 #include <random>
 #include <algorithm>
+#include <chrono>
 
 // SolC = rute samo-musterija (bez AFS-a). AFS se dodaje u cost_of preko canonicalize.
 using SolC = std::vector<std::vector<int>>;
@@ -142,14 +143,20 @@ inline bool try_pair(const Instance& I, SolC& s, const Weights& W, double& cur, 
 }
 
 // Glavna ELS petlja: granularno, prvo-poboljsanje, prolazi dok ima poboljsanja.
+// 'deadline': TVRDI vremenski prekid -- pretraga staje cim se probije rok, i to
+// USRED prolaza (bez ovoga bi na velikim instancama, 50-100 musterija, jedna
+// lokalna pretraga mogla da traje minutima i visestruko probije --time-limit).
 inline void local_search(const Instance& I, SolC& s, const Weights& W,
-                         const std::vector<std::vector<int>>& gran, std::mt19937& rng) {
+                         const std::vector<std::vector<int>>& gran, std::mt19937& rng,
+                         std::chrono::steady_clock::time_point deadline
+                             = std::chrono::steady_clock::time_point::max()) {
     double cur = cost_of(I, s, W);
     int max_routes = std::max((int)s.size() + 2, I.n_vehicles);
     bool improved = true; int guard = 0;
     while (improved && guard++ < 100000) {
         improved = false;
         for (int U = 1; U <= I.n_customers; ++U) {
+            if (std::chrono::steady_clock::now() >= deadline) { drop_empty(s); return; }
             for (int V : gran[U]) {
                 if (U == V) continue;
                 if (try_pair(I, s, W, cur, U, V, max_routes)) { improved = true; break; }

@@ -6,7 +6,7 @@
 # (ugradjeno u oba programa), pa posle ovog skripta odmah imas oba izvestaja.
 #
 # Koriscenje:
-#   ./run_all.sh                       # pun eksperiment (svi setovi, 5 ponavljanja, ~2-3h ukupno)
+#   ./run_all.sh                       # pun eksperiment (svi setovi, 5 ponavljanja; ~6h za OBA algoritma)
 #   ./run_all.sh --set S-Central       # brza proba samo na malom setu (~20 min)
 #   ./run_all.sh --set S-Central --n-runs 1 --time-limit 5   # ekspresna provera (~2 min)
 # Svi argumenti se prosledjuju OBEMA programima (isti protokol -> fer poredjenje).
