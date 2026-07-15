@@ -3,8 +3,6 @@ build/
 cmake-build-*/
 *.o
 
-# automatski sacuvane analize (lokalni izvestaji; po zelji ukloni ovu liniju da ih pushujes)
-results/
 
 # IDE / sistem
 .idea/

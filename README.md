@@ -67,7 +67,7 @@ CMakeLists.txt          # koreni build (obe mete)
 run_all.sh              # pokreni oba algoritma + sacuvaj analize
 gvrp_pcafs_gvns/        # nas GVNS (src/, data/instances/, README.md)
 mets_cpp/               # Xu METS prevod (src/, data/instances/, specs/, README.md)
-results/                # automatski sacuvane analize (git-ignorisano)
+results/                # automatski sacuvane analize (verzionisu se na repou)
 ```
 
 ## Istorija
