@@ -99,7 +99,7 @@ reprodukovati i debagovati.
 - `--seed N` : bazni seed (default 1)
 
 **Sve je u ovom folderu** — kod (`src/`), dataset (`data/instances/`, 40 instanci),
-uputstvo (`README.md`), i specifikacije prevoda (`specs/`). Ništa spolja nije potrebno.
+uputstvo (`README.md`). Ništa spolja nije potrebno.
 
 ## Pokretanje iz terminala
 ```bash
@@ -124,7 +124,6 @@ src/
   reference.hpp     # objavljeni BKS/GRASP/METS brojevi (Tab. II-III)
   main.cpp          # CLI + uporedna tabela (default = pun eksperiment)
 data/instances/     # 40 pravih Xu instanci (.txt), S-Central + M-Central 25/50/100
-specs/              # detaljni specovi iz kojih je radjen prevod (referenca)
 ```
 
 ## Napomene o performansama

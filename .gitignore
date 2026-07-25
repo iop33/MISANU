@@ -7,7 +7,6 @@ cmake-build-*/
 # IDE / sistem
 .idea/
 .DS_Store
-.claude/
 
 # python ostaci (istorija u git-u)
 __pycache__/
