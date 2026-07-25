@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
         std::cout << std::string(96,'=') << "\n";
         std::cout << std::left << std::setw(16) << "Instanca" << std::right
                   << std::setw(10) << "BKS" << std::setw(10) << "METS(rad)"
-                  << std::setw(11) << "OurBest" << std::setw(11) << "OurAvg" << std::setw(10) << "gapMETS%" << std::setw(6) << "feas" << "\n";
+                  << std::setw(11) << "OurBest" << std::setw(17) << "OurAvg±Std" << std::setw(10) << "gapMETS%" << std::setw(6) << "feas" << "\n";
         std::cout << std::string(96,'-') << "\n";
         std::cout << std::fixed << std::setprecision(2);
         std::vector<double> gaps;
@@ -145,11 +145,14 @@ int main(int argc, char** argv) {
             std::cout << std::right << std::setw(10) << bks << std::setw(10) << mets;
             if (!feas.empty()) {
                 double best = *std::min_element(feas.begin(), feas.end());
+                // prosek i devijacija su PREKO IZVODLJIVIH pokretanja (vidi 'feas' kolonu)
                 double avg = 0; for (double d : feas) avg += d; avg /= feas.size();
+                double var = 0; for (double d : feas) var += (d-avg)*(d-avg); var /= feas.size();
+                char avgstd[32]; std::snprintf(avgstd, sizeof(avgstd), "%.2f±%.2f", avg, std::sqrt(var));
                 double g = mets ? 100.0*(best-mets)/mets : 0;
                 if (mets) gaps.push_back(g);
-                std::cout << std::setw(11) << best << std::setw(11) << avg << std::setw(10) << g;
-            } else std::cout << std::setw(11) << "INF" << std::setw(11) << "-" << std::setw(10) << "-";
+                std::cout << std::setw(11) << best << std::setw(17) << avgstd << std::setw(10) << g;
+            } else std::cout << std::setw(11) << "INF" << std::setw(17) << "-" << std::setw(10) << "-";
             std::cout << std::setw(4) << (int)feas.size() << "/" << n_runs << "\n";
         }
         std::cout << std::string(96,'-') << "\n";

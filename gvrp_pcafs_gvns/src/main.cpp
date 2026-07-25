@@ -49,8 +49,53 @@ struct Row {
     bool has_feas=false; double best=0, avg=0, sd=0, worst=0; int feas=0, runs=0, nroutes=0;
 };
 
+// ---- NEZAVISNA PROVERA RESENJA (--verify) ----
+// Rucno, "iz nule", preracunava sve uslove: svaka musterija tacno jednom; svaka
+// deonica izmedju dopuna <= Dmax; trajanje + cekanje na punionici <= Tmax;
+// broj ruta <= broj vozila; raspored na punionici postuje kapacitet.
+// Ispisuje kompletne rute da mogu RUCNO da se provere (npr. za nova najbolja resenja).
+static void verify_and_print(const Instance& ins, const Solution& sol) {
+    std::vector<int> cnt(ins.n_total(), 0);
+    double total = 0; bool ok = true;
+    Reschedule rz = reschedule(ins, sol);              // raspored dopuna -> cekanja po ruti
+    std::cout << std::fixed << std::setprecision(2);
+    for (size_t ri = 0; ri < sol.size(); ++ri) {
+        const Route& r = sol[ri];
+        double leg = 0, maxleg = 0, dur = ins.p_start, dist = 0;
+        std::cout << "  R" << ri+1 << ": depo";
+        for (size_t i = 1; i < r.size(); ++i) {
+            double d = ins.dist[r[i-1]][r[i]];
+            dist += d; leg += d; dur += ins.tt[r[i-1]][r[i]];
+            int nd = r[i];
+            if (ins.is_customer(nd)) { cnt[nd]++; dur += ins.service_time; std::cout << " " << nd; }
+            else if (ins.is_station(nd)) { maxleg = std::max(maxleg, leg); leg = 0; dur += ins.refuel_time; std::cout << " AFS"; }
+            else std::cout << " depo";
+        }
+        maxleg = std::max(maxleg, leg);
+        double wait = ri < rz.route_wait.size() ? rz.route_wait[ri] : 0.0;
+        total += dist;
+        bool legok = maxleg <= ins.d_max + 1e-9;
+        bool durok = dur + wait <= ins.t_max + 1e-9;
+        if (!legok || !durok) ok = false;
+        std::cout << "  | dist=" << dist << " maxDeonica=" << maxleg << (legok ? " <=Dmax OK" : " >Dmax !!")
+                  << " trajanje=" << dur << "+cek" << wait << (durok ? " <=Tmax OK" : " >Tmax !!") << "\n";
+    }
+    int missing = 0, dupl = 0;
+    for (int c = 1; c <= ins.n_customers; ++c) { if (!cnt[c]) missing++; else if (cnt[c] > 1) dupl += cnt[c]-1; }
+    bool served = (missing == 0 && dupl == 0);
+    bool veh = (int)sol.size() <= ins.n_vehicles;
+    if (!served || !veh || !rz.feasible) ok = false;
+    std::cout << "  Musterije: " << (ins.n_customers - missing) << "/" << ins.n_customers
+              << " opsluzeno, duplikata " << dupl << (served ? "  OK" : "  !!") << "\n";
+    std::cout << "  Vozila: " << sol.size() << "/" << ins.n_vehicles << (veh ? "  OK" : "  !!") << "\n";
+    std::cout << "  Kapacitet punionice: " << (rz.feasible ? "OK" : "PREKRSEN")
+              << " (ukupno cekanje " << rz.total_wait << "h)\n";
+    std::cout << "  UKUPNA DISTANCA (nezavisno preracunato): " << total << "\n";
+    std::cout << "  VERDIKT: " << (ok ? "*** RESENJE VALIDNO ***" : "!!! RESENJE NIJE VALIDNO !!!") << "\n";
+}
+
 int main(int argc, char** argv) {
-    std::string set = "S-Central", data_dir = "data/instances";
+    std::string set = "S-Central", data_dir = "data/instances", verify_inst;
     // ISTI PROTOKOL kao mets_cpp: 5 ponavljanja, kontrolisan seed, isti vremenski budzeti.
     int n_runs = 5; double time_limit = -1;
     unsigned base_seed = 1;                       // run r koristi seed = base_seed + r
@@ -68,6 +113,7 @@ int main(int argc, char** argv) {
         else if (a == "--time-limit" && i+1 < argc) time_limit = std::stod(argv[++i]);
         else if (a == "--instances-dir" && i+1 < argc) data_dir = argv[++i];
         else if (a == "--seed" && i+1 < argc) base_seed = (unsigned)std::stoul(argv[++i]);
+        else if (a == "--verify" && i+1 < argc) verify_inst = argv[++i];
     }
     data_dir = find_data_dir(data_dir);
 
@@ -96,6 +142,30 @@ int main(int argc, char** argv) {
     auto default_tl = [](const std::string& s){
         if (s=="S-Central") return 12.0; if (s=="M-Central25") return 20.0;
         if (s=="M-Central50") return 60.0; return 120.0; };
+
+    // ---- REZIM --verify: reprodukuj najbolje resenje JEDNE instance (isti protokol,
+    // isti seed-ovi kao pun eksperiment) pa ga NEZAVISNO proveri i ispisi rute. ----
+    if (!verify_inst.empty()) {
+        std::string path = data_dir + "/" + verify_inst + ".txt";
+        if (!file_exists(path)) { std::cerr << "nema " << path << "\n"; return 1; }
+        Instance ins = load_instance(path);
+        std::string sname = verify_inst.substr(0, verify_inst.rfind('_'));
+        double tl = (time_limit > 0) ? time_limit : default_tl(sname);
+        std::cout << "VERIFIKACIJA " << verify_inst << " (" << n_runs << "x" << (int)tl
+                  << "s, seed " << base_seed << "+r -- isti protokol kao pun eksperiment)\n";
+        GvnsResult best; best.distance = 1e18; best.feasible = false;
+        for (int r = 0; r < n_runs; ++r) {
+            GvnsResult res = gvns(ins, tl, 400, 6, base_seed + r);
+            std::cout << "  run " << r << " (seed=" << base_seed + r << "): "
+                      << (res.feasible ? std::to_string(res.distance) : std::string("INF")) << "\n";
+            if (res.feasible && res.distance < best.distance) best = res;
+        }
+        if (!best.feasible) { std::cout << "Nema izvodljivog resenja za verifikaciju.\n"; return 0; }
+        std::cout << "\nNajbolje resenje (dist=" << std::fixed << std::setprecision(2)
+                  << best.distance << ", ruta " << best.solution.size() << "):\n";
+        verify_and_print(ins, best.solution);
+        return 0;
+    }
 
     for (auto& sname : sets) {
         double tl = (time_limit > 0) ? time_limit : default_tl(sname);
@@ -140,7 +210,7 @@ int main(int argc, char** argv) {
         std::cout << std::string(100,'=') << "\n";
         std::cout << std::left << std::setw(16) << "Instanca" << std::right
                   << std::setw(9) << "BKS" << std::setw(9) << "GRASP" << std::setw(9) << "METS"
-                  << std::setw(10) << "OurBest" << std::setw(12) << "OurAvg" << std::setw(9) << "gapBKS%"
+                  << std::setw(10) << "OurBest" << std::setw(17) << "OurAvg±Std" << std::setw(9) << "gapBKS%"
                   << std::setw(10) << "gapMETS%" << std::setw(8) << "feas" << "\n";
         std::cout << std::string(100,'-') << "\n";
         std::cout << std::fixed << std::setprecision(2);
@@ -148,10 +218,12 @@ int main(int argc, char** argv) {
             std::cout << std::left << std::setw(16) << r.name << std::right
                       << std::setw(9) << r.bks << std::setw(9) << r.grasp << std::setw(9) << r.mets;
             if (r.has_feas) {
-                std::cout << std::setw(10) << r.best << std::setw(12) << r.avg
+                // prosek i devijacija su PREKO IZVODLJIVIH pokretanja (vidi 'feas' kolonu)
+                char avgstd[32]; std::snprintf(avgstd, sizeof(avgstd), "%.2f±%.2f", r.avg, r.sd);
+                std::cout << std::setw(10) << r.best << std::setw(17) << avgstd
                           << std::setw(9) << (r.bks?100.0*(r.best-r.bks)/r.bks:0)
                           << std::setw(10) << (r.mets?100.0*(r.best-r.mets)/r.mets:0);
-            } else std::cout << std::setw(10) << "INF" << std::setw(12) << "-" << std::setw(9) << "-" << std::setw(10) << "-";
+            } else std::cout << std::setw(10) << "INF" << std::setw(17) << "-" << std::setw(9) << "-" << std::setw(10) << "-";
             std::cout << std::setw(6) << r.feas << "/" << r.runs << "\n";
         }
         std::cout << std::string(100,'-') << "\n";

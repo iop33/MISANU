@@ -154,6 +154,23 @@ inline double compute_penalty(const Instance& ins, const Solution& sol) {
     }
     Reschedule rz = reschedule(ins, sol);
     if (!rz.feasible) penalty += rz.total_wait + 1.0;
+
+    // KLJUCNA ISPRAVKA (komentar mentora): kazni NEOPSLUZENE i DUPLIRANE musterije,
+    // kao i VISAK RUTA preko broja vozila. Bez ovoga bi "izbacivanje musterija"
+    // SMANJIVALO cenu (manja kilometraza, nula kazne) i pretraga bi ih rado izbacivala.
+    // Sa PENALTY_WEIGHT >= 1000, svaka nedostajuca musterija kosta >= 1000, sto je
+    // uvek vise od bilo koje ustede u kilometrazi (najvise ~2*Dmax = 320).
+    std::vector<int> cnt(ins.n_total(), 0);
+    for (auto& r : sol) for (int nd : r) if (ins.is_customer(nd)) cnt[nd]++;
+    int missing = 0, dup = 0;
+    for (int c = 1; c <= ins.n_customers; ++c) {
+        if (cnt[c] == 0) ++missing;
+        else if (cnt[c] > 1) dup += cnt[c] - 1;
+    }
+    penalty += 1.0 * (missing + dup);
+    int excess = (int)sol.size() - ins.n_vehicles;      // visak vozila/ruta
+    if (excess > 0) penalty += 1.0 * excess;
+
     return penalty;
 }
 

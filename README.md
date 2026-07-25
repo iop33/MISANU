@@ -43,6 +43,9 @@ Izvrši **oba** algoritma sa istim parametrima. **Analize se automatski čuvaju*
 ```
 `mets_cpp` dodatno: `--inst S-Central_5` (jedna instanca, brza provera vernosti —
 očekivano ~714.55).
+`gvrp_pcafs_gvns` dodatno: `--verify M-Central25_4` — reprodukuje najbolje rešenje
+jedne instance, **ispisuje kompletne rute** i nezavisno proverava sve uslove
+(mušterije/deonice/trajanja/kapacitet). Korišćeno za potvrdu novih najboljih rešenja.
 
 ---
 
@@ -52,6 +55,8 @@ očekivano ~714.55).
 - **5 ponavljanja** po instanci (umesto 30 iz rada — kraće, a dovoljno za poređenje).
 - **Kontrolisan seed**: sva slučajnost je deterministička; run `r` koristi seed
   `base+r`. Isti seed ⇒ bit-identičan rezultat (provereno) → lako debagovanje.
+- **OurAvg±Std** u tabelama je prosek/devijacija **preko izvodljivih pokretanja**
+  (kolona `feas` kaže koliko ih je od ukupno 5).
 - **Ista matrica rastojanja** (euklidska, zaokružena na 2 decimale kao u METS-u) i
   **isti CPU budžet** po instanci za oba algoritma.
 

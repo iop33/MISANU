@@ -109,10 +109,24 @@ inline Solution greedy_construction(const Instance& ins) {
         int nc = 0; for (int x : route) if (ins.is_customer(x)) nc++;
         if (nc > 0) sol.push_back(route); else break;
     }
-    // rezerva: preostale musterije kao pojedinacne rute
+    // Rezerva: preostale musterije NIKAD ne izbacujemo (ispravka po komentaru mentora --
+    // ranije su se tiho gubile kad se potrose vozila, a pretraga ih vise ne vraca).
+    // Ako ima slobodnih vozila -> nova ruta; ako nema -> ubaci na najjeftinije mesto u
+    // postojecu rutu (mozda privremeno neizvodljivo, ali kazna vodi pretragu da popravi).
     for (int c : unserved) {
-        if ((int)sol.size() >= ins.n_vehicles) break;
-        sol.push_back(insert_station_if_needed({0, c, 0}, ins));
+        if ((int)sol.size() < ins.n_vehicles) {
+            sol.push_back(insert_station_if_needed({0, c, 0}, ins));
+            continue;
+        }
+        double best_inc = 1e18; int br = -1, bp = -1;
+        for (int r = 0; r < (int)sol.size(); ++r)
+            for (int pos = 1; pos < (int)sol[r].size(); ++pos) {
+                double inc = ins.dist[sol[r][pos-1]][c] + ins.dist[c][sol[r][pos]]
+                           - ins.dist[sol[r][pos-1]][sol[r][pos]];
+                if (inc < best_inc) { best_inc = inc; br = r; bp = pos; }
+            }
+        if (br >= 0) sol[br].insert(sol[br].begin() + bp, c);
+        else sol.push_back({0, c, 0});               // nema nijedne rute -> otvori ipak
     }
     return sol;
 }

@@ -136,8 +136,23 @@ inline EvalResult evaluate(const Instance& I, const Solution& sol, const Weights
     }
     R.pC = afs_delay_resolve(afs_arr, slack, I.refuel_time, I.station_capacity.empty() ? 1 : I.station_capacity[0]);
     R.pM = std::max((double)R.n_routes - I.n_vehicles, 0.0);
-    R.cost = R.distance + W.wT * R.pT + W.wC * R.pC + W.wD * R.pD + W.wM * R.pM;
-    R.feasible = (R.pT == 0.0 && R.pC == 0.0 && R.pD == 0.0 && R.pM == 0.0);
+
+    // ODBRAMBENA PROVERA (komentar mentora): svaka musterija TACNO JEDNOM.
+    // Strukturno bi uvek trebalo da vazi (potezi cuvaju skup musterija), ali ako bi
+    // ikada neka nestala/duplirala se, resenje NE SME da prodje kao izvodljivo niti
+    // da izgleda jeftinije -- zato ogromna kazna direktno u ceni.
+    std::vector<int> cnt(I.n_customers + 1, 0);
+    for (const Route& r : sol) for (int nd : r) if (nd >= 1 && nd <= I.n_customers) cnt[nd]++;
+    int missing = 0, dup = 0;
+    for (int c = 1; c <= I.n_customers; ++c) {
+        if (cnt[c] == 0) ++missing;
+        else if (cnt[c] > 1) dup += cnt[c] - 1;
+    }
+    bool all_served = (missing == 0 && dup == 0);
+
+    R.cost = R.distance + W.wT * R.pT + W.wC * R.pC + W.wD * R.pD + W.wM * R.pM
+           + 1e7 * (missing + dup);
+    R.feasible = (R.pT == 0.0 && R.pC == 0.0 && R.pD == 0.0 && R.pM == 0.0 && all_served);
     return R;
 }
 

@@ -1,0 +1,15 @@
+[Analiza se automatski cuva u: results/gvns_2026-07-25_17-55-36.txt]
+
+VERIFIKACIJA S-Central_5 (1x5s, seed 1+r -- isti protokol kao pun eksperiment)
+  run 0 (seed=1): 714.550000
+
+Najbolje resenje (dist=714.55, ruta 4):
+  R1: depo 7 14 1 6 13 depo  | dist=159.92 maxDeonica=159.92 <=Dmax OK trajanje=6.50+cek0.00 <=Tmax OK
+  R2: depo AFS 4 12 11 9 depo  | dist=179.02 maxDeonica=99.02 <=Dmax OK trajanje=6.98+cek0.00 <=Tmax OK
+  R3: depo 2 3 AFS 5 15 depo  | dist=175.47 maxDeonica=93.80 <=Dmax OK trajanje=6.89+cek0.00 <=Tmax OK
+  R4: depo 8 10 AFS depo  | dist=200.14 maxDeonica=120.14 <=Dmax OK trajanje=6.50+cek0.00 <=Tmax OK
+  Musterije: 15/15 opsluzeno, duplikata 0  OK
+  Vozila: 4/15  OK
+  Kapacitet punionice: OK (ukupno cekanje 0.00h)
+  UKUPNA DISTANCA (nezavisno preracunato): 714.55
+  VERDIKT: *** RESENJE VALIDNO ***
